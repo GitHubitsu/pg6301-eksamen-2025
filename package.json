@@ -1,0 +1,21 @@
+{
+  "name": "pg6301",
+  "version": "1.0.0",
+  "description": "Eksamensbesvarelse i PG6301 Webutvikling og API-design",
+  "scripts": {
+    "start": "concurrently npm:dev:client npm:dev:server",
+    "dev:client": "cd client && npm run dev",
+    "dev:server": "cd server && npm run dev",
+    "test": "vitest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.2.0",
+    "concurrently": "^9.1.2",
+    "jsdom": "^26.0.0",
+    "vitest": "^3.0.7"
+  }
+}
