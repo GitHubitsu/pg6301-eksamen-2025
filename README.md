@@ -4,6 +4,10 @@ Kandidatnummer: 12
 
 Flowkode:1615 PG6301 1 KONT1 2025 08
 
+GitHub repo: https://github.com/GitHubitsu/pg6301-eksamen-2025
+
+Heroku: [https://git.heroku.com/eksamen2025.git](https://dashboard.heroku.com/apps/eksamen2025/)
+
 ## Gjøremål
 
 * [x] Grunnleggende oppsett
