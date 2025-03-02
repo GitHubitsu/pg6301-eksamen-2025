@@ -6,6 +6,7 @@ import { Link } from "react-router-dom";
 export default function ProfilePage() {
   const [userPosts, setUserPosts] = useState([]);
   const { user, loading } = useUser();
+  const API_URL = import.meta.env.VITE_API_URL;
 
   useEffect(() => {
     if (!user) return;
@@ -13,12 +14,12 @@ export default function ProfilePage() {
     async function fetchUserPosts() {
       try {
         const response = await axios.get(
-          `http://localhost:8000/api/posts/byUser/${user.googleId}`,
+          `${API_URL}/api/posts/byUser/${user.googleId}`,
           { withCredentials: true },
         );
-        setUserPosts(response);
+        setUserPosts(response.data);
       } catch (error) {
-        console.error("Error fetching user posts:", error);
+        console.error("Kunne ikke hente innleggene dine:", error);
       }
     }
 
@@ -70,7 +71,7 @@ export default function ProfilePage() {
             onClick={async () => {
               try {
                 await axios.post(
-                  "http://localhost:8000/api/verify",
+                  `${API_URL}/api/verify`,
                   {},
                   { withCredentials: true },
                 );

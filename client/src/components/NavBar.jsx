@@ -2,7 +2,12 @@ import { Link } from "react-router-dom";
 import { useUser } from "../hooks/useUser";
 
 export default function NavBar() {
-  const user = useUser();
+  const { user } = useUser();
+
+  const API_BASE =
+    process.env.NODE_ENV === "production"
+      ? "wss://eksamen2025-f502a72af49b.herokuapp.com"
+      : "http://localhost:8000";
 
   return (
     <nav>
@@ -25,13 +30,17 @@ export default function NavBar() {
         )}
         <li>
           {!user ? (
-            <a href="http://localhost:8000/auth/google">
-              <button>Login</button>
-            </a>
+            <button
+              onClick={() => (window.location.href = `${API_BASE}/auth/google`)}
+            >
+              Login
+            </button>
           ) : (
-            <a href="http://localhost:8000/logout">
-              <button>Logg ut</button>
-            </a>
+            <button
+              onClick={() => (window.location.href = `${API_BASE}/logout`)}
+            >
+              Logg ut
+            </button>
           )}
         </li>
       </ul>

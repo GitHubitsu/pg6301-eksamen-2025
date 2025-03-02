@@ -1,6 +1,9 @@
 import { Link } from "react-router-dom";
 
 export default function PostList({ posts }) {
+  if (posts.length === 0) {
+    return <p>Ingen innlegg funnet.</p>;
+  }
   return (
     <ul className="cards">
       {posts.map((post) => {
@@ -16,7 +19,7 @@ export default function PostList({ posts }) {
               </time>
               <h2>{post.title}</h2>
               <div className="meta">
-                <span>Skrevet av {post.postedBy}</span>
+                <span>Skrevet av {post.postedBy || "ukjent forfatter"}</span>
               </div>
             </Link>
           </li>

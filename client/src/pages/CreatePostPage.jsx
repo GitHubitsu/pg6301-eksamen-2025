@@ -9,6 +9,7 @@ export default function CreatePostPage() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [error, setError] = useState("");
+  const API_URL = import.meta.env.VITE_API_URL;
 
   function countWords(text) {
     return text
@@ -34,7 +35,7 @@ export default function CreatePostPage() {
 
     try {
       const response = await axios.post(
-        "http://localhost:8000/api/posts",
+        `${API_URL}/api/posts`,
         {
           title,
           content,
@@ -46,7 +47,7 @@ export default function CreatePostPage() {
 
       if (response.status === 201) {
         alert("Innlegget ble opprettet!");
-        navigate("/posts");
+        setTimeout(() => navigate("/posts"), 2000);
       }
     } catch (error) {
       setError(
@@ -65,11 +66,12 @@ export default function CreatePostPage() {
   }
 
   return (
-    <div>
+    <div className="new-content">
       <h2>Opprett nytt innlegg</h2>
       <form onSubmit={handleSubmit}>
         <label>
           Tittel:
+          <br />
           <input
             type="text"
             value={title}
@@ -80,6 +82,7 @@ export default function CreatePostPage() {
         <br />
         <label>
           Innhold:
+          <br />
           <textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}

@@ -4,18 +4,17 @@ import axios from "axios";
 export function useUser() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const API_URL = import.meta.env.VITE_API_URL;
 
   useEffect(() => {
     async function fetchUser() {
       try {
-        const response = await axios.get("http://localhost:8000/api/me", {
+        const response = await axios.get(`${API_URL}/api/me`, {
           withCredentials: true, // ✅ Ensures session cookie is sent
         });
 
-        console.log("✅ Fetched user:", response.data);
         setUser(response.data);
       } catch (error) {
-        console.error("❌ Error fetching user:", error);
         setUser(null);
       } finally {
         setLoading(false);
@@ -23,7 +22,7 @@ export function useUser() {
     }
 
     fetchUser();
-  }, []);
+  }, [API_URL]);
 
   return { user, loading };
 }

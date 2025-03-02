@@ -7,36 +7,46 @@ import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { MongoClient, ServerApiVersion } from "mongodb";
 import { WebSocketServer } from "ws";
-console.log("✅ Modules imported");
-
-console.log("📡 Setting up Express...");
-const app = express();
-console.log("✅ Express initialized");
-const PORT = process.env.PORT || 8000;
-
 import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
 dotenv.config();
 
+const app = express();
+const PORT = process.env.PORT || 8000;
+const CLIENT_URL = process.env.CLIENT_URL;
+const MONGODB_URI = process.env.MONGODB_URI;
+const SESSION_SECRET = process.env.SESSION_SECRET;
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 
 app.use(express.json());
-app.use(cors({ origin: "http://localhost:5173", credentials: true }));
+app.use(
+  cors({
+    origin: CLIENT_URL || "http://localhost:5173",
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  }),
+);
 
 app.use(
   session({
-    secret: "your-secret-key",
+    secret: SESSION_SECRET,
     resave: false,
-    saveUninitialized: false, // ✅ Ensure uninitialized sessions are saved
+    saveUninitialized: false,
     store: MongoStore.create({
-      mongoUrl: "mongodb://127.0.0.1:27017/eksamen-react",
+      mongoUrl: MONGODB_URI,
       collectionName: "sessions",
-      ttl: 14 * 24 * 60 * 60, // Sessions expire after 14 days
+      ttl: 14 * 24 * 60 * 60,
+      autoRemove: "native",
+      crypto: { secret: SESSION_SECRET },
     }),
     cookie: {
-      secure: false, // Keep false for local development (set to true in production with HTTPS)
+      secure: process.env.NODE_ENV === "production",
       httpOnly: true,
       sameSite: "lax",
+      maxAge: 1000 * 60 * 60 * 24 * 14,
     },
   }),
 );
@@ -46,25 +56,24 @@ app.use(passport.session());
 
 let db;
 
-console.log("🔗 Connecting to database...");
 async function connectToDB() {
-  console.log("🔍 Connecting to MongoDB...");
-  const uri = "mongodb://127.0.0.1:27017";
-  const client = new MongoClient(uri, {
-    serverApi: {
-      version: ServerApiVersion.v1,
-      strict: true,
-      deprecationErrors: true,
-    },
-  });
-  console.log("⏳ Awaiting MongoDB connection...");
-  await client.connect();
-  console.log("✅ Connected to MongoDB");
-  console.log("✅ MongoDB Connected!");
-  db = client.db("eksamen-react");
+  try {
+    const client = new MongoClient(MONGODB_URI, {
+      serverApi: {
+        version: ServerApiVersion.v1,
+        strict: true,
+      },
+    });
+    await client.connect();
+    db = client.db("Posts");
+    console.log("✅ Connected to MongoDB");
+  } catch (error) {
+    console.error("❌ Database connection failed:", error);
+    process.exit(1);
+  }
 }
-await connectToDB(); // 🚨 Possible blocking point
-console.log("✅ Database connected");
+
+await connectToDB();
 
 passport.use(
   new GoogleStrategy(
@@ -77,56 +86,37 @@ passport.use(
       let user = await db.collection("users").findOne({ googleId: profile.id });
 
       if (!user) {
-        // User signing in for first time, create new user
         user = {
           googleId: profile.id,
           displayName: profile.displayName,
-          verified: false, // Set default user status
+          verified: false,
         };
         await db.collection("users").insertOne(user);
       }
-
       return done(null, user);
     },
   ),
 );
 
 passport.serializeUser((user, done) => {
-  console.log("🔑 Serializing user:", user.googleId);
   done(null, user.googleId);
 });
 passport.deserializeUser(async (googleId, done) => {
-  console.log("🔍 Deserializing user:", googleId);
-  if (!googleId) {
-    console.log("❌ No googleId found in session.");
-    return done(null, false);
-  }
   try {
     const user = await db.collection("users").findOne({ googleId });
-
-    if (!user) {
-      console.log("❌ User not found in DB!");
-      return done(null, false);
-    }
-
-    console.log("✅ Found user in DB:", user);
     done(null, user);
   } catch (error) {
-    console.error("❌ Error deserializing user:", error);
     done(error);
   }
 });
-
+/*
 app.use((req, res, next) => {
-  console.log("🛠️ SESSION DEBUG: ", req.session);
-  console.log("🛠️ USER DEBUG: ", req.user);
+  console.log("🔍 Incoming Request:", req.method, req.url);
+  console.log("🔍 Session Data:", req.session);
+  console.log("🔍 User Data:", req.user);
   next();
 });
-
-app.get("/", (req, res) => {
-  res.send("🚀 Server is running! Welcome to the API.");
-});
-
+*/
 app.get(
   "/auth/google",
   passport.authenticate("google", { scope: ["profile"], session: true }),
@@ -135,94 +125,37 @@ app.get(
 app.get(
   "/auth/google/callback",
   passport.authenticate("google", {
-    successRedirect: "http://localhost:5173/",
-    failureRedirect: "http://localhost:5173/login",
+    successRedirect: CLIENT_URL,
+    failureRedirect: `${CLIENT_URL}/login`,
   }),
 );
 
-app.get("/api/me", (req, res) => {
-  console.log("🔍 Checking session data:");
-  console.log("Session:", req.session);
-  console.log("User:", req.user);
-  if (!req.isAuthenticated()) {
-    console.log("❌ User not authenticated.");
-    return res.status(401).json({ error: "Not authenticated" });
-  }
-  console.log("✅ User authenticated:", req.user);
-  res.json(req.user);
-});
-
-app.get("/logout", (req, res, next) => {
+app.get("/logout", (req, res) => {
   req.logout((err) => {
     if (err) {
-      return next(err);
+      return res.status(500).json({ error: "Logout failed" });
     }
 
     req.session.destroy((error) => {
       if (error) {
-        console.error("❌ Error destroying session:", error);
         return res.status(500).json({ error: "Logout failed" });
       }
 
-      res.clearCookie("connect.sid", { path: "/" }); // Explicitly clear session cookie
-      console.log("✅ Successfully logged out");
-
-      res.redirect("http://localhost:5173/");
+      res.clearCookie("connect.sid", { path: "/" });
+      res.redirect(CLIENT_URL);
     });
   });
 });
-/*
-app.get("/logout", (req, res, next) => {
-  req.logout((err) => {
-    if (err) {
-      return next(err);
-    }
-    req.session.destroy(() => {
-      res.redirect("http://localhost:5173/");
-    });
-  });
-});
-*/
-app.get("/api/posts/latest", async (req, res) => {
-  console.log("🚀 Request received at /api/posts/latest");
-  if (!db) {
-    console.error("❌ Database not connected");
-    return res.status(500).json({ error: "Database not connected" });
+
+app.get("/api/me", (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ error: "Not authenticated" });
   }
-
-  try {
-    console.log("✅ Fetching latest posts...");
-    const latestPosts = await db
-      .collection("posts")
-      .find({ createdAt: { $exists: true } })
-      .sort({ createdAt: -1 }) // Filtrerer nyeste først
-      .limit(3) // Henter kun tre
-      .toArray();
-
-    console.log("📝 Latest posts result:", latestPosts);
-
-    if (!latestPosts.length) {
-      console.warn("⚠️ No posts found!");
-      return res.status(404).json({ error: "No posts found" });
-    }
-
-    res.json(latestPosts);
-  } catch (error) {
-    console.error("Error fetching latest posts:", error);
-    res.status(500).json({ error: "Database error" });
-  }
-});
-
-app.get("/api/posts/:name", async (req, res) => {
-  const { name } = req.params;
-
-  const post = await db.collection("posts").findOne({ name });
-
-  if (!post) {
-    return res.status(404).json({ error: "Post not found" });
-  }
-
-  res.json(post);
+  /*if (!req.isAuthenticated()) {
+    console.log("❌ User not authenticated.");
+    return res.status(401).json({ error: "Not authenticated" });
+  }*/
+  res.json(req.user);
 });
 
 app.get("/api/posts", async (req, res) => {
@@ -230,7 +163,33 @@ app.get("/api/posts", async (req, res) => {
     const posts = await db.collection("posts").find().toArray();
     res.json(posts);
   } catch (error) {
-    console.error("Error fetching posts:", error);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.get("/api/posts/latest", async (req, res) => {
+  try {
+    const latestPosts = await db
+      .collection("posts")
+      .find({ createdAt: { $exists: true } })
+      .sort({ createdAt: -1 })
+      .limit(3)
+      .toArray();
+    res.json(latestPosts);
+  } catch (error) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.get("/api/posts/:name", async (req, res) => {
+  const { name } = req.params;
+  try {
+    const post = await db.collection("posts").findOne({ name });
+    if (!post) {
+      return res.status(404).json({ error: "Post not found" });
+    }
+    res.json(post);
+  } catch (error) {
     res.status(500).json({ error: "Database error" });
   }
 });
@@ -238,11 +197,23 @@ app.get("/api/posts", async (req, res) => {
 app.get("/api/reactions", async (req, res) => {
   try {
     const posts = await db.collection("posts").find().toArray();
-    const allReactions = posts.flatMap((post) => post.reactions); // ✅ Extract all reactions
+    const allReactions = posts.flatMap((post) => post.reactions);
 
     res.json(allReactions);
   } catch (error) {
-    console.error("Error fetching reactions:", error);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.get("/api/posts/byUser/:userId", async (req, res) => {
+  const { userId } = req.params;
+  try {
+    const userPosts = await db
+      .collection("posts")
+      .find({ postedById: userId })
+      .toArray();
+    res.json(userPosts);
+  } catch (error) {
     res.status(500).json({ error: "Database error" });
   }
 });
@@ -251,38 +222,35 @@ app.post("/api/posts", async (req, res) => {
   if (!req.isAuthenticated() || !req.user.verified) {
     return res
       .status(403)
-      .json({ error: "Only verified users can create posts." });
+      .json({ error: "Bare verifiserte brukere kan opprette innlegg." });
   }
 
   const { title, content, postedBy, postedById } = req.body;
 
   if (!title || !content) {
-    return res.status(400).json({ error: "Title and content are required." });
+    return res.status(400).json({ error: "Tittel og innhold er påkrevd." });
   }
 
   if (content.split(" ").length < 10) {
     return res
       .status(400)
-      .json({ error: "Content must be at least 10 words." });
+      .json({ error: "Teksten må inneholde minst 10 ord." });
   }
 
   try {
     const newPost = {
       title,
       content: Array.isArray(content) ? content : [content],
-      postedBy,
-      postedById,
+      postedBy: req.user.displayName,
+      postedById: req.user.googleId,
       name: title.toLowerCase().replace(/[^a-z0-9-]+/g, "-"), // Generate a URL-friendly name
       comments: [],
       reactions: [],
       createdAt: new Date(),
     };
-
     await db.collection("posts").insertOne(newPost);
-    console.log("✅ Post created:", newPost);
-    res.status(201).json({ message: "Post created successfully!" });
+    res.status(201).json({ message: "Innlegget er blitt opprettet!" });
   } catch (error) {
-    console.error("❌ Error creating post:", error);
     res.status(500).json({ error: "Database error" });
   }
 });
@@ -293,7 +261,6 @@ app.post("/api/posts/:name/comments", async (req, res) => {
       .status(401)
       .json({ error: "Du må være logget inn for å velge en emoji." });
   }
-
   const { name } = req.params;
   const { postedBy, text } = req.body;
 
@@ -320,21 +287,6 @@ app.post("/api/posts/:name/comments", async (req, res) => {
     );
     res.json(updatedPost);
   } catch (error) {
-    console.error("❌ Error adding comment:", error);
-    res.status(500).json({ error: "Database error" });
-  }
-});
-
-app.get("/api/posts/byUser/:userId", async (req, res) => {
-  const { userId } = req.params;
-  try {
-    const userPosts = await db
-      .collection("posts")
-      .find({ postedBy: userId })
-      .toArray();
-    res.json(userPosts);
-  } catch (error) {
-    console.error("Error fetching user posts:", error);
     res.status(500).json({ error: "Database error" });
   }
 });
@@ -348,11 +300,9 @@ app.post("/api/verify-user", async (req, res) => {
     await db
       .collection("users")
       .updateOne({ googleId: req.user.googleId }, { $set: { verified: true } });
-
     req.user.verified = true; // Update session data
     res.json({ success: true });
   } catch (error) {
-    console.error("Error verifying user:", error);
     res.status(500).json({ success: false, error: "Database error" });
   }
 });
@@ -371,19 +321,6 @@ app.post("/api/verify", async (req, res) => {
     console.error("Error verifying user:", error);
     res.status(500).json({ error: "Database error" });
   }
-});
-
-app.get("/debug-session", (req, res) => {
-  console.log("🔍 Checking session data:");
-  console.log("Session:", req.session);
-  console.log("Session Passport:", req.session.passport);
-  console.log("User:", req.user);
-
-  res.json({
-    session: req.session,
-    passport: req.session.passport,
-    user: req.user,
-  });
 });
 
 app.put("/api/posts/:name", async (req, res) => {
@@ -423,11 +360,17 @@ app.put("/api/posts/:name", async (req, res) => {
   }
 });
 
-async function startServer() {
-  console.log("🚀 Starting server...");
-  await connectToDB();
+if (process.env.NODE_ENV === "production") {
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  app.use(express.static(path.join(__dirname, "../client/dist")));
 
-  console.log("🚀 Starting Express server...");
+  app.get("*", (req, res) => {
+    res.sendFile(path.join(__dirname, "../client/dist", "index.html"));
+  });
+}
+
+async function startServer() {
+  await connectToDB();
 
   const server = app.listen(PORT, () => {
     console.log("Server is running on port " + PORT);
@@ -438,28 +381,23 @@ async function startServer() {
     process.exit(1);
   }
 
-  // ✅ Test Route
-  app.get("/test", (req, res) => {
-    res.json({ message: "Server is working!" });
+  const wss = new WebSocketServer({ noServer: true });
+
+  server.on("upgrade", (request, socket, head) => {
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit("connection", ws, request);
+    });
   });
 
-  console.log("✅ Test route /test added!");
-
-  const wss = new WebSocketServer({ server });
-
   wss.on("connection", (ws) => {
-    console.log("🔗 WebSocket Connected!");
-
+    console.log("Websocket connected");
     ws.on("message", async (message) => {
       try {
         const data = JSON.parse(message);
         const { action, payload } = data;
 
         if (action === "reactToPost") {
-          console.log("🔄 Processing reaction for:", payload);
-
           const { postName, emoji, userId } = payload;
-
           if (!userId) {
             ws.send(
               JSON.stringify({
@@ -477,8 +415,6 @@ async function startServer() {
             );
             return;
           }
-
-          // Fetch the post from the database
           const post = await db.collection("posts").findOne({ name: postName });
 
           if (!post) {
@@ -488,22 +424,18 @@ async function startServer() {
             return;
           }
 
-          // Ensure `reactions` exists in post
           if (!post.reactions) {
             post.reactions = [];
           }
 
-          // Find existing reaction by this user
           const existingReactionIndex = post.reactions.findIndex(
             (r) => r.userId === userId,
           );
 
           if (existingReactionIndex >= 0) {
-            // Update the existing reaction
             post.reactions[existingReactionIndex].emoji = emoji;
             post.reactions[existingReactionIndex].timestamp = new Date();
           } else {
-            // Add new reaction
             post.reactions.push({
               emoji,
               userId,
@@ -511,7 +443,6 @@ async function startServer() {
             });
           }
 
-          // Update the database
           await db
             .collection("posts")
             .updateOne(
@@ -519,7 +450,6 @@ async function startServer() {
               { $set: { reactions: post.reactions } },
             );
 
-          // Check how many unique posts the user has reacted to
           const uniqueReactions = await db
             .collection("posts")
             .aggregate([
@@ -528,18 +458,12 @@ async function startServer() {
             ])
             .toArray();
 
-          console.log(
-            `🔍 User ${userId} has reacted to ${uniqueReactions.length} unique posts.`,
-          );
-
           if (uniqueReactions.length >= 3) {
-            console.log(`✅ User ${userId} is now verified.`);
             await db
               .collection("users")
               .updateOne({ googleId: userId }, { $set: { verified: true } });
           }
 
-          // Broadcast updated reactions to all clients subscribed to this post
           const reactionUpdate = {
             action: "updateReactions",
             payload: { postName, reactions: post.reactions },

@@ -3,60 +3,70 @@ import { useUser } from "../hooks/useUser.jsx";
 
 const emojis = ["👍", "❤️", "😂", "😮", "😢", "😡"];
 
+const WS_URL =
+  process.env.NODE_ENV === "production"
+    ? "wss://eksamen2025-f502a72af49b.herokuapp.com"
+    : "ws://localhost:8000/";
+
 export default function Emojis({ postName }) {
   const [reactionCounts, setReactionCounts] = useState({});
-  // const [socket, setSocket] = useState(null);
   const { user } = useUser();
   const socketRef = useRef(null);
+  let retryAttempts = 0;
+  const maxRetries = 5;
 
   useEffect(() => {
     function connectWebSocket() {
+      if (retryAttempts >= maxRetries) {
+        console.error("WebSocket reconnection limit reached.");
+        return;
+      }
       if (
         socketRef.current &&
         socketRef.current.readyState === WebSocket.OPEN
       ) {
-        console.warn("⚠️ WebSocket already open, skipping reconnection.");
         return;
       }
 
-      const ws = new WebSocket("ws://localhost:8000");
-
-      // const connectWebSocket = () => {
+      const ws = new WebSocket(WS_URL);
 
       ws.onopen = () => {
-        console.log("🔗 Connected to WebSocket");
+        retryAttempts = 0;
         ws.send(
           JSON.stringify({ action: "subscribeToPost", payload: { postName } }),
         );
       };
 
       ws.onmessage = (event) => {
-        const message = JSON.parse(event.data);
-        if (
-          message.action === "updateReactions" &&
-          message.payload.postName === postName
-        ) {
-          const counts = {};
-          emojis.forEach((emoji) => {
-            counts[emoji] = message.payload.reactions.filter(
-              (r) => r.emoji === emoji,
-            ).length;
-          });
-          setReactionCounts(counts);
-        } else if (message.action === "error") {
-          console.error("❌ WebSocket Error:", message.error);
+        try {
+          const message = JSON.parse(event.data);
+          if (
+            message.action === "updateReactions" &&
+            message.payload.postName === postName
+          ) {
+            const counts = {};
+            emojis.forEach((emoji) => {
+              counts[emoji] = message.payload.reactions.filter(
+                (r) => r.emoji === emoji,
+              ).length;
+            });
+            setReactionCounts(counts);
+          }
+        } catch (error) {
+          console.error("WebSocket message parsing error:", error);
         }
       };
 
       ws.onerror = (error) => {
-        console.error("❌ WebSocket encountered an error:", error);
+        console.error("WebSocket encountered an error:", error);
       };
 
       ws.onclose = () => {
         console.warn(
           "⚠️ WebSocket connection closed. Attempting to reconnect...",
         );
-        setTimeout(connectWebSocket, 3000); // Retry connection after 3 seconds
+        retryAttempts++;
+        setTimeout(connectWebSocket, 3000);
       };
 
       socketRef.current = ws;
@@ -66,7 +76,6 @@ export default function Emojis({ postName }) {
 
     return () => {
       if (socketRef.current) {
-        console.log("⚠️ Closing WebSocket...");
         socketRef.current.close();
       }
     };
@@ -74,11 +83,11 @@ export default function Emojis({ postName }) {
 
   const handleReaction = (emoji) => {
     if (!user) {
-      alert("You must be logged in to react!");
+      alert("Du må være logget inn for å legge igjen en reaksjon");
       return;
     }
     if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
-      console.error("⚠️ WebSocket is not open. Cannot send reaction.");
+      alert("WebSocket er ikke tilkoblet. Prøv igjen senere.");
       return;
     }
 
@@ -87,12 +96,15 @@ export default function Emojis({ postName }) {
       payload: {
         postName,
         emoji,
-        userId: user.googleId, // ✅ Ensures userId is included
+        userId: user.googleId,
       },
     };
 
-    console.log("📩 Sending reaction:", reactionPayload);
-    socketRef.current.send(JSON.stringify(reactionPayload));
+    try {
+      socketRef.current.send(JSON.stringify(reactionPayload));
+    } catch (error) {
+      console.log("Lagring av reaksjon feilet:", error);
+    }
   };
 
   return (

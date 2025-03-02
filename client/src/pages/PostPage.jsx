@@ -4,13 +4,13 @@ import axios from "axios";
 import CommentsList from "../components/CommentsList";
 import AddCommentForm from "../components/AddCommentForm.jsx";
 import Emojis from "../components/Emojis.jsx";
+import { useUser } from "../hooks/useUser.jsx";
 
 export default function PostPage() {
   const { name } = useParams();
   const { comments: initialComments, postContent } = useLoaderData();
-
-  console.log("🔍 Route Param (name):", name);
-  console.log("📩 Loaded Data from API:", postContent);
+  const { user } = useUser();
+  const API_URL = import.meta.env.VITE_API_URL;
 
   const contentArray = Array.isArray(postContent.content)
     ? postContent.content
@@ -19,17 +19,21 @@ export default function PostPage() {
   const [comments, setComments] = useState(initialComments);
 
   async function onAddComment({ nameText, commentText }) {
-    const response = await axios.post(
-      "/api/posts/" + name + "/comments",
-      {
-        postedBy: nameText,
-        text: commentText,
-      },
-      {
-        withCredentials: true,
-      },
-    );
-    setComments(response.data.comments);
+    try {
+      const response = await axios.post(
+        `${API_URL}/api/posts/${name}/comments`,
+        {
+          postedBy: nameText,
+          text: commentText,
+        },
+        {
+          withCredentials: true,
+        },
+      );
+      setComments(response.data.comments);
+    } catch (error) {
+      console.error(error);
+    }
   }
 
   return (
@@ -40,7 +44,7 @@ export default function PostPage() {
         <p key={index}>{p}</p>
       ))}
 
-      <Emojis postName={name} currentUserId={"user123"} />
+      <Emojis postName={name} currentUserId={"user?.googleId"} />
 
       <AddCommentForm onAddComment={onAddComment} />
       <CommentsList comments={comments} />
@@ -49,11 +53,10 @@ export default function PostPage() {
 }
 
 export async function loader({ params }) {
-  console.log("🔍 Fetching Post:", params.name);
-  const response = await axios.get("/api/posts/" + params.name, {
+  const API_URL = import.meta.env.VITE_API_URL;
+  const response = await axios.get(`${API_URL}/api/posts/${params.name}`, {
     withCredentials: true,
   });
-  console.log("📩 Response:", response.data);
   const { title, comments, content } = response.data;
 
   return {

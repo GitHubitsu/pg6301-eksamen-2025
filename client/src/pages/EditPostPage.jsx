@@ -11,33 +11,30 @@ export default function EditPostPage() {
   const [post, setPost] = useState(null);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const API_URL = import.meta.env.VITE_API_URL;
 
   useEffect(() => {
     if (!user) return;
 
     async function fetchPost() {
       try {
-        const response = await axios.get(
-          `http://localhost:8000/api/posts/${name}`,
-          {
-            withCredentials: true,
-          },
-        );
+        const response = await axios.get(`${API_URL}/api/posts/${name}`, {
+          withCredentials: true,
+        });
 
         const postData = response.data;
 
-        // ✅ Ensure only the post owner can edit
         if (postData.postedById !== user.googleId) {
           alert("You can only edit your own posts.");
-          navigate("/posts");
+          setTimeout(() => navigate("/posts"), 2000);
           return;
         }
 
         setPost(postData);
         setTitle(postData.title);
-        setContent(postData.content.join("\n")); // Join array into text
+        setContent(postData.content.join("\n"));
       } catch (error) {
-        console.error("Error fetching post:", error);
+        console.error("Kunne ikke laste innlegget:", error);
       }
     }
 
@@ -47,19 +44,18 @@ export default function EditPostPage() {
   async function handleSubmit(e) {
     e.preventDefault();
 
-    // ✅ Validation: Ensure title & content meet the criteria
     if (
       !title.trim() ||
       content.trim().split(/\s+/).length < 10 ||
       content.length > 1000
     ) {
-      alert("Post must have at least 10 words and not exceed 1000 characters.");
+      alert("Innlegget må ha minst 10 ord og ikke overstige 1000 tegn.");
       return;
     }
 
     try {
       const response = await axios.put(
-        `http://localhost:8000/api/posts/${name}`,
+        `${API_URL}/api/posts/${name}`,
         {
           title,
           content: content.split("\n"), // Convert text to array
@@ -68,12 +64,11 @@ export default function EditPostPage() {
       );
 
       if (response.status === 200) {
-        alert("Post updated successfully!");
-        navigate(`/posts/${name}`);
+        alert("Innlegget ble oppdatert!");
+        setTimeout(() => navigate(`/posts/${name}`), 2000);
       }
     } catch (error) {
-      console.error("Error updating post:", error);
-      alert("Could not update post.");
+      alert("Kunne ikke oppdatere innlegget.");
     }
   }
 

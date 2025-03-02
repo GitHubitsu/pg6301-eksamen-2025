@@ -1,4 +1,7 @@
 export default function CommentsList({ comments }) {
+  if (!comments || comments.length === 0) {
+    return <p>Ingen kommentarer enda.</p>;
+  }
   return (
     <div className="comments-list">
       <h3>Kommentarer: </h3>
