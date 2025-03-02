@@ -4,7 +4,7 @@
   "description": "Eksamensbesvarelse i PG6301 Webutvikling og API-design",
   "scripts": {
     "start": "cd server && npm start",
-    "heroku-postbuild": "cd client && npm install && npm run build && cd ../server && npm install",
+    "heroku-postbuild": "cd server && npm install && cd ../client && npm install && npm run build",
     "dev:client": "cd client && npm run dev",
     "dev:server": "cd server && npm run dev",
     "test": "vitest"
