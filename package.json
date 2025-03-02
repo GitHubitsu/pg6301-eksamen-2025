@@ -9,6 +9,9 @@
     "dev:server": "cd server && npm run dev",
     "test": "vitest"
   },
+  "engines": {
+    "node": "20.x"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
