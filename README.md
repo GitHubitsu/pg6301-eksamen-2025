@@ -61,3 +61,7 @@ mangler tekst.
 CSS Grid er benyttet for stilsetting sammen med Flexbox. Prettier formatterer koden, og
 Concurrently benyttes sammen med Nodemon for å starte server og klient samtidig med
 kommandoen npm start. Vitest starter testing med kommandoen npm test.
+
+Appen har fungert ganske fint lokalt på egen maskin, men ville ikke bygge på Heroku.
+Dermed feiler deployering til Heroku, med en uforståelig feilmelding om at den ikke
+kan finne @vitejs/plugin-react.
